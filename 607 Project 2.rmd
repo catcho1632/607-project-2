@@ -1,0 +1,164 @@
+# Project 2
+## By Catherine Cho
+
+### Subproject 1: Alan Noel's post
+### What means of control is most used now?
+```{r}
+library(readr)
+urlfile<-"https://raw.githubusercontent.com/alnoel/CUNYSPS-Data607/main/globaldataset_20200414.csv"
+global<-read_csv(url(urlfile))
+
+library("dplyr")
+library(tidyr)
+#subsetting the data to contain only the variables related to means of control. The 
+control<-global[grepl("meansOfControl",names(global))]
+control<-control[-18:-19]
+#dataframe "tally" is created to tally up incidents per means of control
+tally<-control%>%
+  gather(x,value,meansOfControlDebtBondage:meansOfControlOther)%>%
+  group_by(x)%>%
+  tally(value==1)
+#finding location in dataframe "tally" of max incidents
+loc<-which(tally==max(tally[,2]),arr.ind = TRUE)
+#answer to question 1: Most used means of control
+control_max_tally<-tally[loc[1,1],1]
+
+#The results below shows that Psychological Abuse is the means of control most used now. 
+control_max_tally
+
+
+```
+
+### Which means of control is most used with females versus males?
+
+```{r}
+library(tidyr)
+control$gender<-global$gender
+control
+#First, checking to see how many distinct values exist in dataframe. In this data set, data of Male and Female exist.
+unique(control[c("gender")])
+
+#transform dataframe to long form
+control_long<-control%>%
+  pivot_longer(meansOfControlDebtBondage:meansOfControlOther,names_to="Control Type",values_to="occurence")
+
+#summarizes two more columns that meet the conditional statements... female or male and has an occurence of 1
+tally_gender<-control_long%>%
+  group_by(`Control Type`)%>%
+  summarise(
+    female=sum(gender=="Female" & occurence==1),
+    male=sum(gender=="Male" & occurence==1)
+  )
+tally_gender
+
+#finds the location of max occurence and returns the control type
+loc_female_max<-which(tally_gender==max(tally_gender[,2]),arr.ind = TRUE)
+female_max<-tally_gender[loc_female_max[1],1]
+loc_male_max<-which(tally_gender==max(tally_gender[,3]),arr.ind = TRUE)
+male_max<-tally_gender[loc_male_max[1],1]
+#The results below shows that Psychological Abuse has the highest tally for women out of all means of control.
+female_max
+#The results below shows that False Promises has the highest tally for men out of all means of control.
+male_max
+```
+
+### Subproject 2: Catherine Cho's Post, "Income and Religion"
+https://www.pewforum.org/religious-landscape-study/income-distribution/#religious-tradition
+
+1.Currently the data reports the proportion of people per income range identify with a Religiuos group. The data can tidyed in a different way in order to assess what proportion of people per religious group fits into a certain income category. Out of each religious group total, which income range has the greatest proportion of people? 
+ 
+```{r}
+library(readr)
+library(tidyr)
+library(stringr)
+urlfile<-"https://raw.githubusercontent.com/catcho1632/607-project-2/main/income_religion.csv"
+religion<-read_csv(url(urlfile))
+
+#converting characters to numeric values
+religion$`Less than $30,000`<-as.numeric(str_replace_all(religion$`Less than $30,000`,"%",""))/100
+religion$`$30,000-$49,999`<-as.numeric(str_replace_all(religion$`$30,000-$49,999`,"%",""))/100
+religion$`$50,000-$99,999`<-as.numeric(str_replace_all(religion$`$50,000-$99,999`,"%",""))/100
+religion$`$100,000 or more`<-as.numeric(str_replace_all(religion$`$100,000 or more`,"%",""))/100
+
+#converting percentages to frequency 
+religion$`Less than $30,000`<-religion$`Less than $30,000`*religion$`Sample Size`
+religion$`$30,000-$49,999`<-religion$`$30,000-$49,999`*religion$`Sample Size`
+religion$`$50,000-$99,999`<-religion$`$50,000-$99,999`*religion$`Sample Size`
+religion$`$100,000 or more`<-religion$`$100,000 or more`*religion$`Sample Size`
+
+#converting to long form
+religion_long<-religion%>%
+  pivot_longer(`Less than $30,000`:`$100,000 or more`,names_to="salary_range",values_to="frequency")
+#converting to wide form to "transpose" the dataframe
+religion_wide<-religion_long%>%
+  pivot_wider(names_from = `Religious tradition`,values_from=frequency)
+religion_wide<-select(religion_wide,-1)
+
+#transposed dataframe
+religion_wide
+library(data.table)
+religion_t<-data.table(religion_wide)[,lapply(.SD,function(x) x[order(is.na(x))])]
+religion_t<-religion_t[1:4,]
+religion_t
+
+#Adding updated Sample Size column
+religion_t$row_sum=rowSums(religion_t[,c(-1)])
+
+#calculating proportion per salary_range
+religion_final<-religion_t%>%
+  mutate(
+    across(c(2:13),
+           .fns=~./row_sum)
+  )
+religion_final
+
+#The following table can be further manipulated but now the table can be analyzed per income group rather than the income distribution within each group.The max proportion associated to each income group is listed in row_max. It appears that majority of the income groups fit into the evangelical protestant religion groups except for the highest earning group of $100,000 or more. In this case, the unaffiliated group has the majority. 
+
+library(matrixStats)
+
+religion_final$row_max=rowMaxs(as.matrix(religion_final[,c(-1,-14)]))
+religion_final
+```
+### Subproject 3: Victoria McEleney's Post, "West Nile Virus"
+The West Nile Virus dataset collected in the US by the CDC is summarized in the table below. Does more Neuroinvasive cases or Non-neuroinvasive cases lead to death?
+```{r}
+library(stringr)
+urlfile<-"https://raw.githubusercontent.com/catcho1632/607-project-2/main/West_Nile_Virus.csv"
+virus<-read_csv(url(urlfile))
+
+virus<-virus[3:23,1:5]
+colnames(virus)<-c("year","Neuroinvasive_cases","Neuroinvasive_deaths","Non-Neuroinvasive_cases","Non-Neuroinvasive_deaths")
+
+#String extract using regex for Neuroinvasive cases
+virus$Neuroinvasive_cases<-str_replace_all(virus$Neuroinvasive_cases,",","")
+virus$Neuroinvasive_cases<-as.numeric(str_extract_all(virus$Neuroinvasive_cases,"\\d+",simplify=TRUE))
+
+#String extract using regex for Neuroinvasive deaths
+virus$Neuroinvasive_deaths<-str_replace_all(virus$Neuroinvasive_deaths,"\\((\\d\\d|\\d)\\)","")
+virus$Neuroinvasive_deaths<-str_extract_all(virus$Neuroinvasive_deaths,"\\d+|\\d",simplify=TRUE)
+virus$Neuroinvasive_deaths<-as.numeric(unlist(str_extract(virus$Neuroinvasive_deaths, "\\d+|\\d")))
+
+#String extract using regex for Non-Neuroinvasive cases
+virus$`Non-Neuroinvasive_cases`<-str_replace_all(virus$`Non-Neuroinvasive_cases`,",","")
+virus$`Non-Neuroinvasive_cases`<-as.numeric(str_extract_all(virus$`Non-Neuroinvasive_cases`,"\\d+|\\d",simplify = TRUE))
+
+#String extract using regex for Non-Neuroinvasive deaths
+virus$`Non-Neuroinvasive_deaths`<-str_replace_all(virus$`Non-Neuroinvasive_deaths`,"\\((\\d\\d|\\d)\\)","")
+virus$`Non-Neuroinvasive_deaths`<-str_replace_all(virus$`Non-Neuroinvasive_deaths`,"\\(\\<\\d\\)","")
+virus$`Non-Neuroinvasive_deaths`<-str_extract_all(virus$`Non-Neuroinvasive_deaths`,"\\d+|\\d",simplify=TRUE)
+virus$`Non-Neuroinvasive_deaths`<-as.numeric(unlist(str_extract(virus$`Non-Neuroinvasive_deaths`, "\\d+|\\d")))
+
+#converting deaths to proportions of cases that lead to death
+virus$Neuroinvasive_deaths<-virus$Neuroinvasive_deaths/virus$Neuroinvasive_cases
+virus$`Non-Neuroinvasive_deaths`<-virus$`Non-Neuroinvasive_deaths`/virus$`Non-Neuroinvasive_cases`
+
+#The proportions are weighted per cases in a year
+virus$Neuro_x_weight<-virus$Neuroinvasive_deaths*virus$Neuroinvasive_cases
+virus$Non_Neuro_x_weight<-virus$`Non-Neuroinvasive_deaths`*virus$`Non-Neuroinvasive_cases`
+Neuro_weighted_avg<-round(sum(virus$Neuro_x_weight)/sum(virus$Neuroinvasive_cases)*100)
+Non_Neuro_weighted_avg<-round(sum(virus$Non_Neuro_x_weight)/sum(virus$`Non-Neuroinvasive_cases`)*100)
+Neuro_weighted_avg
+Non_Neuro_weighted_avg
+#It is apparent that more neuroinvasive cases lead to death than non-neuroinvasive cases. It appears that neuroinvasive cases recover 90% of the time and 99.5% of the time non-neuroinvasive cases. 
+
+```
